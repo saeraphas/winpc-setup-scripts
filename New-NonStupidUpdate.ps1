@@ -7,4 +7,4 @@ $categories = @(
 "Updates"
 )
 
-Install-WindowsUpdate -Category $categories -NotTitle "preview" -AcceptAll
+Install-WindowsUpdate -Category $categories -NotTitle "preview" -AcceptAll -IgnoreReboot

@@ -47,12 +47,15 @@ Start-Transcript -Path $automationlog -Append
 
 try {
     # 3. Secure Password Prompt
-    $adminSecure = Read-Host -Prompt "Enter the admin password" -AsSecureString
-    $vncSecure   = Read-Host -Prompt "Enter the VNC password" -AsSecureString
+    #$adminSecure = Read-Host -Prompt "Enter the admin password" -AsSecureString
+    #$vncSecure   = Read-Host -Prompt "Enter the VNC password" -AsSecureString
 
     # Convert to plain text for the MSI installer arguments
-    $adminstring = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($adminSecure))
-    $vncstring   = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($vncSecure))
+    #$adminstring = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($adminSecure))
+    #$vncstring   = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($vncSecure))
+
+    $adminstring = "tacocat2"
+    $vncstring = "racecar1"
 
     # 4. Configuration
     $URI = "https://www.tightvnc.com/download/2.8.85/tightvnc-2.8.85-gpl-setup-64bit.msi"

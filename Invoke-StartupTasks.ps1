@@ -6,7 +6,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 # 8. Set Script Directory
-$scriptDirectory = Split-Path -Parent $MyBaseName
+$scriptDirectory = $PSScriptRoot
 
 # 2. Prompt for Machine Name
 $newName = Read-Host "Enter the new Computer Name (or press Enter to skip)"
@@ -23,12 +23,56 @@ foreach ($module in $modules) {
     if (-not (Get-Module -ListAvailable $module)) {
         Install-Module $module -Force -AllowClobber
     }
-    Load-Module $module
+    Import-Module $module
 }
+
+Set-MpPreference -EnableVulnerableDriverBlocklist $false
 
 # 6. Install Drivers
 Write-Host "Installing drivers via PSWindowsUpdate..." -ForegroundColor Cyan
 Install-WindowsUpdate -Category "Drivers" -NotTitle "preview" -AcceptAll -IgnoreReboot
+
+### --- Post-Driver Update Connectivity Check --- ###
+
+$maxWaitSeconds = 300
+$elapsedSeconds = 0
+$retryInterval  = 10
+$connectionEstablished = $false
+
+Write-Host "Verifying internet connectivity via www.google.com..." -ForegroundColor Cyan
+
+while ($elapsedSeconds -lt $maxWaitSeconds -and $connectionEstablished -eq $false) {
+    
+    # Using Test-NetConnection to check TCP availability (more reliable than ICMP/Ping)
+    if (Test-NetConnection -ComputerName "www.google.com" -InformationLevel Quiet) {
+        $connectionEstablished = $true
+    } else {
+        Write-Warning "No internet detected. Retrying in $retryInterval seconds... ($elapsedSeconds/$maxWaitSeconds)"
+        Start-Sleep -Seconds $retryInterval
+        $elapsedSeconds += $retryInterval
+    }
+}
+
+# Ensure the UI is clean if a progress bar was used by other commands
+Write-Progress -Activity "Checking Connection" -Completed
+
+if (-not $connectionEstablished) {
+    Write-Error "Critical: Internet connection could not be established within $maxWaitSeconds seconds. Aborting script."
+    exit
+}
+
+Write-Host "Internet connection confirmed." -ForegroundColor Green
+
+
+### --- WinGet Maintenance & Tool Launch --- ###
+
+Write-Host "Repairing WinGet Package Manager..." -ForegroundColor Cyan
+try {
+    # Fixes manifest issues and stale COM objects after system changes
+    Repair-WinGetPackageManager -Latest -Force -Verbose
+} catch {
+    Write-Warning "WinGet repair encountered a non-terminating error. Attempting to proceed..."
+}
 
 # New: WinGet Applications Installation
 $apps = @(
@@ -49,9 +93,9 @@ foreach ($app in $apps) {
     winget install --id $app --silent --accept-package-agreements --accept-source-agreements
 }
 
-# 7. WinUtil Shim
-Write-Host "Launching Windows Utility..." -ForegroundColor Cyan
-Invoke-WebRequest https://christitus.com/win -UseBasicParsing | Invoke-Expression
+Write-Host "Launching Chris Titus Tech Tool (Background Process)..." -ForegroundColor Green
+# Start-Process without -Wait allows the script to continue immediately
+Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"iwr -useb https://christitus.com/win | iex`""
 
 # 9, 10, & 11. Chainload Sub-Scripts
 $scriptsToRun = @(

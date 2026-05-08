@@ -1,56 +1,84 @@
-# Ensure Admin
+# ============================
+# Microsoft Edge De-Bloat Script (Enhanced)
+# ============================
+
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Warning "Please run as Administrator."
     Exit
 }
 
 $RegPath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
-$Paths = @($RegPath, "$RegPath\ExtensionInstallForcelist", "$RegPath\RestoreOnStartupURLs")
+$SubKeys = @(
+    $RegPath,
+    "$RegPath\ExtensionInstallForcelist",
+    "$RegPath\RestoreOnStartupURLs"
+)
 
-foreach ($P in $Paths) { if (-not (Test-Path $P)) { New-Item $P -Force | Out-Null } }
+foreach ($Key in $SubKeys) { if (-not (Test-Path $Key)) { New-Item -Path $Key -Force | Out-Null } }
 
 $Policies = @{
-    # PASSWORD & REWARDS
-    "PasswordManagerEnabled"       = 0
-    "MicrosoftRewardsUserStatusEnabled" = 0
+    # ---- Startup & Identity ----
+    "HideFirstRunExperience"              = 1
+    "BrowserSignin"                       = 0
+    "BrowserAddProfileEnabled"            = 0
+    "DefaultBrowserSettingEnabled"        = 0
+    "RestoreOnStartup"                    = 4 # Open specific URLs
+    "StartupBoostEnabled"                 = 0 # Faster startup often keeps Edge in background; disable it
     
-    # BROWSER CHECKS & PROMPTS
-    "DefaultBrowserSettingEnabled" = 0
-    "HideFirstRunExperience"       = 1
-    "BrowserSignin"                = 0
-    "BrowserAddProfileEnabled"     = 0
-    
-    # STARTUP & NAVIGATION
-    "RestoreOnStartup"             = 4
-    "HomepageLocation"             = "about:blank"
-    "HomepageIsNewTabPage"         = 0
-    "NewTabPageLocation"           = "about:blank" # Redirects New Tab to about:blank
-    "NewTabPageAllowed"            = 0             # Disables the MS News feed
-    
-    # UI BLOAT
-    "HubsSidebarEnabled"           = 0
-    "WebWidgetAllowed"             = 0
-    "BackgroundModeEnabled"        = 0
-    "ShoppingAssistantEnabled"     = 0
+    # ---- New Tab & Home ----
+    "HomepageIsNewTabPage"                = 0
+    "HomepageLocation"                    = "about:blank"
+    "NewTabPageLocation"                  = "about:blank"
+    "NewTabPageContentEnabled"            = 0
+    "NewTabPageQuickLinksEnabled"         = 0
+    "PromotionalTabsEnabled"              = 0
+    "ShowRecommendationsEnabled"          = 0
+    "NewTabPageBackgroundImageEnabled"    = 0
+    "NewTabPageAllowedBackgroundTypes"    = 3
+
+    # ---- AI & Copilot (The most annoying part) ----
+    "ComposeEnabled"                      = 0
+    "DiscoverPageContextEnabled"          = 0    # Stops Edge from "reading" your page for AI
+    "EdgeCopilotEnabled"                  = 0    # The main switch for Edge AI
+    "EdgeDiscoverEnabled"                 = 0    # Obsolete but still good for older versions
+    "EdgeSidebarAppSet"                   = ""
+    "HubsSidebarEnabled"                  = 0    # Kills the sidebar entirely
+    "Microsoft365CopilotChatIconEnabled"  = 0    # Specific icon toggle for Entra/M365 accounts
+
+    # ---- Privacy & Telemetry ----
+    "MicrosoftRewardsUserStatusEnabled"   = 0
+    "EdgeShoppingAssistantEnabled"        = 0
+    "PersonalizationReportingEnabled"     = 0
+    "MetricsReportingEnabled"             = 0
+    "SearchSuggestEnabled"                = 0
+    "AddressBarTrendingSuggestEnabled"    = 0
+    "UserFeedbackAllowed"                 = 0
+
+    # ---- Browser Utilities ----
+    "EdgeCollectionsEnabled"              = 0
+    "EdgeWalletCheckoutEnabled"           = 0
+    "BackgroundModeEnabled"               = 0
+    "PasswordManagerEnabled"              = 0 # Optional: prevents "Save Password?" prompts
 }
 
-Write-Host "Applying Registry Policies..." -ForegroundColor Cyan
+Write-Host "Applying Edge De-Bloat Policies..." -ForegroundColor Cyan
+
 foreach ($Policy in $Policies.GetEnumerator()) {
     $Type = if ($Policy.Value -is [int]) { "DWord" } else { "String" }
-    Set-ItemProperty -Path $RegPath -Name $Policy.Name -Value $Policy.Value -Type $Type -Force
+    Set-ItemProperty -Path $RegPath -Name $Policy.Key -Value $Policy.Value -Type $Type -Force
 }
 
-# 1. Set Startup URL List (Only about:blank)
-# We clear the key first to ensure NO other URLs are in the list
-Remove-Item -Path "$RegPath\RestoreOnStartupURLs" -Recurse -ErrorAction SilentlyContinue
-New-Item -Path "$RegPath\RestoreOnStartupURLs" -Force | Out-Null
-Set-ItemProperty -Path "$RegPath\RestoreOnStartupURLs" -Name "1" -Value "about:blank" -Force
+# ---- Force Startup URL to Blank ----
+Set-ItemProperty -Path "$RegPath\RestoreOnStartupURLs" -Name "1" -Value "about:blank" -Type String -Force
 
-# 2. Force uBlock Origin
-$uBlockID = "odfafbeednnidgdbecfnebebebehmhlf;https://edge.microsoft.com/extensionlocation/edge"
-Set-ItemProperty -Path "$RegPath\ExtensionInstallForcelist" -Name "1" -Value $uBlockID -Force
+# ---- Force uBlock Origin Lite ----
+# Uses the Extension ID for uBlock Origin Lite
+$uBlockLite = "cimighlppcgcoapaliogpjjdehbnofhn;https://edge.microsoft.com/extensionwebstorebase/v1/crx"
+Set-ItemProperty -Path "$RegPath\ExtensionInstallForcelist" -Name "1" -Value $uBlockLite -Type String -Force
 
+# ---- Cleanup & Restart ----
 Write-Host "Killing Edge processes..." -ForegroundColor Yellow
-Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
+Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
 
 Write-Host "Done." -ForegroundColor Green

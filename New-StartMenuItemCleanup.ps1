@@ -1,55 +1,80 @@
-$TargetPaths = @(
-    "$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
-    "$env:AppData\Microsoft\Windows\Start Menu\Programs",
-    "$env:Public\Desktop",
-    "$env:UserProfile\Desktop"
-)
+$shell = New-Object -ComObject WScript.Shell
+$unwantedPaths = New-Object System.Collections.Generic.List[string]
+$startMenuPaths = "$env:AppData\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
 
-$UnwantedKeywords = @("*uninstall*", "*help*", "*website*", "*web site*")
+$startKeywords = @("uninstall*")
+$anywhereKeywords = @("*help*", "*website*", "*web site*", "*readme*", "*read me*")
 
-$ItemsToDelete = foreach ($Path in $TargetPaths) {
-    if (Test-Path $Path) {
-        # Check if we are currently processing a Desktop folder
-        $IsDesktop = $Path -like "*Desktop*"
-
-        Get-ChildItem -Path $Path -Recurse:$false -Include *.lnk, *.url | 
-            Where-Object { 
-                $itemName = $_.Name
-                $match = $false
+# --- Pass 1: Identify Unwanted Files ---
+$allFiles = Get-ChildItem -Path $startMenuPaths -Recurse -Include *.lnk, *.url
+foreach ($file in $allFiles) {
+    $isUnwanted = $false
+    
+    if ($file.Extension -eq ".url") {
+        $isUnwanted = $true
+    }
+    else {
+        # Rule: .lnk files checked by keyword
+        foreach ($word in $startKeywords) { if ($file.Name -like $word) { $isUnwanted = $true; break } }
+        
+        if (-not $isUnwanted) {
+            foreach ($word in $anywhereKeywords) { if ($file.Name -like $word) { $isUnwanted = $true; break } }
+        }
+        
+        # Rule: Check Shortcut Target (Dead links and .pdf files)
+        if (-not $isUnwanted) {
+            try {
+                $target = $shell.CreateShortcut($file.FullName).TargetPath
                 
-                if ($IsDesktop) {
-                    # On Desktop, we flag all .lnk and .url files
-                    $match = $true
-                } else {
-                    # In Start Menu, we only flag based on keywords
-                    foreach ($word in $UnwantedKeywords) {
-                        if ($itemName -like $word) { $match = $true; break }
+                if (-not [string]::IsNullOrWhiteSpace($target)) {
+                    # NEW RULE: Check if the target is a PDF file
+                    if ($target -like "*.pdf") {
+                        $isUnwanted = $true
+                    }
+                    # Rule: Check for dead links
+                    elseif (-not (Test-Path -Path $target)) {
+                        $isUnwanted = $true
                     }
                 }
-                $match
+            } catch { 
+                # If we can't read the shortcut, it's often safer to ignore, 
+                # but you could set $isUnwanted = $true here if you want to be aggressive.
             }
+        }
+    }
+
+    if ($isUnwanted) { $unwantedPaths.Add($file.FullName) }
+}
+
+# --- Pass 2: Identify Empty Directories (Excluding Startup) ---
+# WMF 5.1 compatibility: Ensure we handle the list comparison correctly
+$allDirs = Get-ChildItem -Path $startMenuPaths -Recurse -Directory | Sort-Object { $_.FullName.Split('\').Count } -Descending
+foreach ($dir in $allDirs) {
+    if ($dir.Name -eq "Startup") { continue }
+    
+    $currentFiles = Get-ChildItem -Path $dir.FullName -File
+    $currentSubDirs = Get-ChildItem -Path $dir.FullName -Directory
+    
+    # Check if files in this folder are NOT in our unwanted list
+    $remainingItems = $currentFiles | Where-Object { $unwantedPaths -notcontains $_.FullName }
+    
+    # If no valid files remain and no subdirectories exist, flag folder for removal
+    if ($null -eq $remainingItems -and $currentSubDirs.Count -eq 0) {
+        $unwantedPaths.Add($dir.FullName)
     }
 }
 
-if ($ItemsToDelete) {
-    Write-Host "The following launchers/shortcuts have been flagged for removal:" -ForegroundColor Cyan
-    $ItemsToDelete | Select-Object @{Name="Type"; Expression={$_.Extension}}, @{Name="Name"; Expression={$_.Name}}, @{Name="Folder"; Expression={$_.DirectoryName}} | Out-String | Write-Host
-
-    $Confirmation = Read-Host "Proceed with deletion? (Y/N)"
-
-    if ($Confirmation -eq 'Y') {
-        foreach ($Item in $ItemsToDelete) {
-            try {
-                Remove-Item -Path $Item.FullName -Force -ErrorAction Stop
-                Write-Host "Deleted: $($Item.Name)" -ForegroundColor Gray
-            } catch {
-                Write-Warning "Failed to delete: $($Item.Name). Check permissions."
-            }
-        }
-        Write-Host "`nCleanup finished successfully." -ForegroundColor Green
-    } else {
-        Write-Host "Cleanup cancelled. No files were harmed." -ForegroundColor Yellow
+# --- Display and Action ---
+if ($unwantedPaths.Count -gt 0) {
+    Write-Host "The following items are flagged for removal:" -ForegroundColor Yellow
+    $unwantedPaths | ForEach-Object { Write-Host $_ }
+    
+    $confirm = Read-Host "`nFound $($unwantedPaths.Count) items. Delete all? (y/n)"
+    if ($confirm -eq 'y') {
+        # Sort by length descending to delete children before parents
+        $unwantedPaths | Sort-Object Length -Descending | Remove-Item -Force -Recurse
+        Write-Host "Cleanup complete." -ForegroundColor Green
     }
 } else {
-    Write-Host "No matching shortcuts found. Your environment is already clean!" -ForegroundColor Green
+    Write-Host "No unwanted items detected." -ForegroundColor Cyan
 }

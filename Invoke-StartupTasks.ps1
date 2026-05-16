@@ -97,11 +97,16 @@ Write-Host "Launching Chris Titus Tech Tool (Background Process)..." -Foreground
 # Start-Process without -Wait allows the script to continue immediately
 Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"iwr -useb https://christitus.com/win | iex`""
 
+Write-Host "Launching Tool (Background Process)..." -ForegroundColor Green
+# Start-Process without -Wait allows the script to continue immediately
+Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"iwr -useb https://get.activated.win | iex`""
+
 # 9, 10, & 11. Chainload Sub-Scripts
 $scriptsToRun = @(
+    "New-PowerProfileOverride.ps1",
     "New-EdgeConfiguration.ps1",
     "New-ExplorerQuickAccessConfiguration.ps1",
-    "New-NetwordRegistryConfiguration.ps1",
+    "New-NetworkRegistryConfiguration.ps1",
     "New-OpenShellStartMenuInstallation.ps1",
     "New-TightVNCInstallation.ps1",
     "New-StartMenuItemCleanup.ps1",

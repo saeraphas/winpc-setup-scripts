@@ -100,6 +100,8 @@ Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Comm
 # 9, 10, & 11. Chainload Sub-Scripts
 $scriptsToRun = @(
     "New-EdgeConfiguration.ps1",
+    "New-ExplorerQuickAccessConfiguration.ps1",
+    "New-NetwordRegistryConfiguration.ps1",
     "New-OpenShellStartMenuInstallation.ps1",
     "New-TightVNCInstallation.ps1",
     "New-StartMenuItemCleanup.ps1",
